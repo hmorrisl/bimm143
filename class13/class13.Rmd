@@ -47,9 +47,33 @@ Do the same for ligand-only
 ```{r}
 lig <- trim.pdb(hiv, "ligand")
 lig
-write.pdb(lig, file = "1hsg_ligand.pdb")
+write.pdb(lig, file = "ligand.pdb")
 ```
 
 ## Using AutoDockTools to setup protein docking input
 
 ## Prepare docking configuration file
+
+## Docking with Vina
+We run this command:
+`~/Downloads/autodock_vina_1_1_2_mac/bin/vina --config config.txt --log log.txt`
+
+##Read docking results
+
+We got a file all.pdbqt that we need to make into a PDB format.
+
+```{r}
+res <- read.pdb("all.pdbqt", multi = TRUE)
+write.pdb(res, "results.pdb")
+res
+```
+
+Qualitatively the crystal binding mode is nearly reproduced by the best docking conformation accouding to AutoDock Vina.
+
+But what about qunatitatively? We can use `rmsd()` to quantify the comparison. 
+
+```{r}
+ori <- read.pdb("ligand.pdbqt")
+rmsd(ori, res)
+```
+
