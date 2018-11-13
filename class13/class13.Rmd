@@ -51,3 +51,5 @@ write.pdb(lig, file = "1hsg_ligand.pdb")
 ```
 
 ## Using AutoDockTools to setup protein docking input
+
+## Prepare docking configuration file
