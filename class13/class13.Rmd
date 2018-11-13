@@ -1,0 +1,53 @@
+---
+title: "Class 13: Structural Bioinformatics II"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Get HIV-Pr structure from PDB database
+
+We will work with the struture 1HSG
+
+```{r}
+library(bio3d)
+file.name <- get.pdb("1hsg")
+```
+
+Read this into R and examine composition
+
+```{r}
+hiv <- read.pdb(file.name)
+hiv
+```
+
+Question 1: The ligand is MK1 and the second nonprotein residue is HOH
+
+## Prepare initial protein and ligand input files
+
+Split into protein only and a ligand only
+
+We will use the `trim.pdb()` function to split our input structure
+
+```{r}
+prot <- trim.pdb(hiv, "protein")
+prot
+```
+
+Write out a new protein-only pdb file
+
+```{r}
+write.pdb(prot, file = "1hsg_protein.pdb")
+```
+
+Do the same for ligand-only
+
+```{r}
+lig <- trim.pdb(hiv, "ligand")
+lig
+write.pdb(lig, file = "1hsg_ligand.pdb")
+```
+
+## Using AutoDockTools to setup protein docking input
