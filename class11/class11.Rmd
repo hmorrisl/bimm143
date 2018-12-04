@@ -1,0 +1,135 @@
+---
+title: "Class 11: Structural Bioinformatics"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##1.1 PDB Statistics 
+
+Download pdb stats data as CSV file from https://www.rcsb.org/stats/summary
+```{r}
+pdbstats <- read.csv("Data Export Summary.csv", row.names = 1)
+library(knitr)
+kable(pdbstats)
+```
+
+```{r}
+#total number of structures
+tot.st <- sum(pdbstats$Total)
+#total number of structures 
+percent <- round(pdbstats$Total/tot.st*100, 2)
+nstats <- pdbstats
+nstats$Percent <- percent
+kable(nstats)
+```
+
+
+Question 1:
+There are `r percent[1]`% X-ray structures and `r percent[2]`% NMR strutures in the PDB data base as of `r Sys.Date()`.
+
+```{r}
+percent.pro <- round(sum(pdbstats$Proteins)/tot.st*100, 2)
+
+```
+
+There are `r percent.pro`% protein strutures in the PDB data base as of `r Sys.Date()`.
+
+##Section 3: Getting Started with Bio3D
+
+Any time we want to use a package we must load it with the **library()** function. 
+```{r}
+library(bio3d)
+```
+
+```{r}
+pdb <- read.pdb("1hsg")
+pdb
+head(pdb$atom)
+```
+
+```{r}
+pdb$xyz
+dim(pdb$xyz)
+pdb$xyz[ 1, atom2xyz(1:2)]
+```
+
+Select all C-alpha atoms
+```{r}
+ca.inds <- atom.select(pdb, "calpha")
+ca.inds
+
+```
+
+```{r}
+#Print details of the first few selected atoms
+head(pdb$atom[ca.inds$atom,])
+#And selected xyz coordinates
+head(pdb$xyz[,ca.inds$xyz])
+```
+
+```{r}
+ligand.inds <- atom.select(pdb, "ligand")
+ligand.inds
+```
+
+```{r}
+pdb$atom[ligand.inds$atom,]
+```
+
+```{r}
+
+```
+
+##Section 4: Working with multiple PDB files
+
+
+Aligning multiple structures
+```{r}
+ids <- c("1TND_B","1AGR_A","1TAG_A","1GG2_A","1KJY_A","4G5Q_A")
+files <- get.pdb(ids, split = TRUE)
+```
+
+Extract and Align the chains we are interested in 
+Print to screen a summary of the 'pdbs' object 
+```{r}
+pdbs <- pdbaln(files, fit = TRUE)
+pdbs
+```
+
+To access the first few rows of the alignment matrix we use standard subsetting syntax for matrices in R:
+```{r}
+pdbs$ali[1:5, 1:8]
+```
+
+Associated residue numbers
+```{r}
+pdbs$resno[1:5, 1:8]
+```
+
+## PCA of the above aligned sequences
+
+Find invariant core
+```{r}
+core <- core.find(pdbs)
+```
+Superimpose all structures to core
+```{r}
+pdbs$xyz = pdbfit(pdbs, core)
+```
+Perform PCA
+```{r}
+pc.xray <- pca(pdbs)
+plot(pc.xray)
+```
+Calculate RMSD
+```{r}
+rd <- rmsd(pdbs)
+```
+## Visualize first principal component
+```{r}
+pc1 <- mktrj(pc.xray, pc=1, file="pc_1.pdb")
+```
+
