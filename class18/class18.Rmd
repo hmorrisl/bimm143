@@ -1,0 +1,241 @@
+---
+title: "Cancer Genomics"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Section 2: The GenomicDataCommons R package
+
+The GenomicDataCommons Bioconductor package provides functions for querying, accessing, and mining the NCI-GDC in R. Using this package allows us to couple large cancer genomics data sets (for example the actual RNA-Seq, WXS or SNP data) directly to the plethora of state-of-the-art bioinformatics methods available in R. This is important because it greatly facilitates both targeted and exploratory analysis of molecular cancer data well beyond that accessible via a web portal.
+
+We will first use functions from the GenomicDataCommons package to identify and then fetch somatic variant results from the NCI-GDC and then provide a high-level assessment of those variants using the maftools package. The later package works with Mutation Annotation Format or MAF format files used by GDC and others to store somatic variants.
+
+The workflow will be:
+
+1. Install packages if not already installed
+2. Load libraries
+3. Identify and download somatic variants for a representative TCGA dataset, in this case pancreatic adenocarcinoma.
+4. Use maftools to provide rich summaries of the data.
+
+```{r message=FALSE}
+library(GenomicDataCommons)
+library(maftools)
+```
+
+```{r}
+GenomicDataCommons::status()
+```
+## Section 3: Querying the GDC from R
+
+We will typically start our interaction with the GDC by searching the resource to find data that we are interested in investigating further. In GDC speak this is called “Querying GDC metadata”. Metadata here refers to the extra descriptive information associated with the actual patient data (i.e. ‘cases’) in the GDC.
+
+The are four main sets of metadata that we can query with this package, namely cases(), projects(), files(), and annotations(). We will start with cases() and use an example from the package associated publication to answer our first question above (i.e. find the number of cases/patients across different projects within the GDC):
+
+```{r}
+cases_by_project <- cases() %>%
+  facet("project.project_id") %>%
+  aggregations()
+```
+
+```{r, include = FALSE}
+head(cases_by_project)
+```
+
+
+Write the R code to make a bar plot of cases per project. Let's plot this data with a log scale for the y-axis, rotated axis labels (las=2) and color the bar corresponding
+
+
+
+
+```{r}
+x <- cases_by_project$project.project_id
+paa.ind <- which(x$key == "TCGA-PAAD")
+
+colvec <- rep("lightblue", nrow(x))
+#Repeating light blue the number of rows of x
+
+colvec[paa.ind] <- "red"
+
+par(mar = c(9, 4, 0, 2))
+barplot(x$doc_count, names.arg = x$key, log = "y", col = colvec, las = 2, cex.names = 0.9)
+
+```
+
+Now let's answer our second question from above - namely ‘find all gene expression data files for all pancreatic cancer patients
+
+```{r}
+## This code snippet is taken from the package vignette
+file_records <- files() %>%
+  filter(~ cases.project.project_id == "TCGA-PAAD" &
+    data_type == "Gene Expression Quantification" &
+    analysis.workflow_type == "HTSeq - Counts") %>%
+  response_all()
+```
+
+```{r, include = FALSE}
+head(file_records)
+```
+
+## Section 4: Variant analysis with R
+
+Note we could go to the NCI-GDC web portal and enter the Advanced Search page and then construct a search query to find MAF format somatic mutation files for our ‘TCGA-PAAD’ project. However, the website frequently crashes. Need a more robust way to get the data.
+
+After some exploration of the website I came up with the following query: “cases.project.project_id in ["TCGA-PAAD"] and files.data_type in ["Masked Somatic Mutation"] and files.data_format in ["MAF"]”
+
+```{r}
+maf.files = files() %>%
+    filter(~ cases.project.project_id == 'TCGA-PAAD' &
+        data_type == 'Masked Somatic Mutation' &
+        data_format == "MAF" &
+        analysis.workflow_type == "MuTect2 Variant Aggregation and Masking"
+    ) %>%
+    response_all()
+```
+
+```{r}
+attributes(maf.files)
+```
+
+```{r}
+head(maf.files$results)
+```
+
+```{r}
+uid <- ids(maf.files)
+
+maffile = gdcdata(uid)
+
+
+```
+
+```{r}
+maffile
+```
+
+```{r}
+vars = read.maf(maf = maffile, verbose = FALSE)
+```
+
+# Plotting MAF Summary 
+
+We can use plotmafSummary() function to plot a summary of the maf object, which displays number of variants in each sample as a stacked bar plot and variant types as a boxplot summarized by Variant_Classification. We can add either mean or median line to the stacked bar plot to display average/median number of variants across the cohort.
+
+```{r}
+plotmafSummary(maf =vars, rmOutlier = TRUE,
+               addStat = 'median', dashboard = TRUE,
+               titvRaw = FALSE)
+```
+
+
+# Drawing oncoplots
+
+A very useful summary representation of this data can be obtained via so-called oncoplots, also known as waterfall plots.
+
+```{r}
+oncoplot(maf = vars, top = 10)
+```
+
+You might to run the oncoplot() command in the R Console and then zoom the display to see the full plot (as it is rather large and may not appear initially in your Rmarkdown document before Knitting. Another option is to send your plot to a PNG or PDF plot device directly, for example:
+
+```{r}
+pdf("oncoplot_panc.pdf")
+oncoplot(maf = vars, top = 10, fontSize = 12)
+dev.off()
+```
+
+# Lollipop Plot for KRAS
+
+```{r}
+lollipopPlot(maf = vars, gene = 'KRAS', 
+                         showMutationRate = TRUE, domainLabelSize = 3)
+```
+
+# Lollipop Plot TP53
+
+```{r}
+lollipopPlot(maf = vars, gene = 'TP53', 
+                         showMutationRate = TRUE, domainLabelSize = 3)
+```
+
+
+
+
+### Project 2
+
+```{r}
+library(bio3d)
+```
+
+
+```{r}
+seqs <- read.fasta("lecture18_sequences.fa")
+```
+
+```{r}
+seqaln(seqs)
+# It appears there are some point mutations and the mutant is truncated.
+```
+
+
+9-mers: A sequence with the mutation. 
+How can we use R so that we don't have to count and copy and paste each 9-mer. We want from 8 residues before the mutation to 8 residues after
+
+1. Find out where the residues are different (the number position of the vector)
+2. Extract the 9-mers from the vector
+
+```{r}
+score <- conserv(seqs, "identity")
+mutant.inds <- which(score < 1)
+```
+
+```{r}
+#these are the tumor specific sites (plus gaps)
+seqs$ali[, mutant.inds]
+```
+
+Can we identify tupor specific sites and exclude gaps
+We can try the **gap.inspect()** function and the `f.inds` output, which is the indices for non-gap containing columns
+```{r}
+gaps <- gap.inspect(seqs)
+gaps$f.inds
+```
+
+```{r}
+seqs$ali[, gaps$f.inds]
+```
+
+```{r}
+# vector
+mutant.inds
+# vector
+gaps$f.inds
+
+# These are the tumor specific sites
+mutant.positions <- mutant.inds[mutant.inds %in% gaps$f.inds]
+```
+
+```{r}
+start.position <- mutant.positions - 8
+end.position <- mutant.positions + 8
+
+start.position
+
+```
+
+```{r}
+end.position
+```
+
+```{r}
+mutant.positions
+```
+
+```{r}
+seqs$ali[, start.position[1] : end.position[1]]
+```
+
+
+
