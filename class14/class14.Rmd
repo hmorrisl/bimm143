@@ -1,0 +1,95 @@
+---
+title: "Class 14: RNA Seq"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Part 1: Asthmal SNPs
+Examing Asthma SnPs in the MXL (Mexican Ancestry in Los Angeles) 1000 Genomes sequencing data
+
+```{r}
+mxl <- read.csv("373531-SampleGenotypes-Homo_sapiens_Variation_Sample_rs8067378.csv", row.names = 1)
+table(mxl)
+```
+Let's focus on the column that 
+
+```{r}
+genotypes <- round(table(mxl[,1])/nrow(mxl)*100, 2)
+genotypes
+```
+
+In the MXL population, `r genotypes[1]`% have the A/A SNP.
+
+
+## Part 2: Initial RNA Seq analysis
+
+Interpreting Bast qualities in R:
+FastQ - Q stands for "quality scores line"
+This is a fastqsanger file. The offset is 33.
+
+```{r}
+#install.packages("seqinr")
+#install.packages("gtools")
+library(seqinr)
+library(gtools)
+phred <- asc( s2c("DDDDCDEDCDDDDBBDDDCC@") ) - 33
+phred
+
+prob <- 10**(-phred/10)
+```
+
+
+## Using Galaxy for NGS analysis
+
+Uploaded fastq files online to galaxy.
+Performed quality control - fastqc manipulation
+  Looked at sequencing quality and context
+  
+## Mapping RNA-seq reads to genome
+
+Using Galaxy for NGS analysis:
+
+The major challenge when mapping RNA-seq reads is that the reads, because they come from RNA, often cross splice junction boundaries; splice junctions are not present in a genome's sequence. We will use TopHat which is designed to map RNA-seq reads. 
+
+Our input data is pair-end data. For Tophat in Galaxy, you need to set paired-end as your input type and then provide the forward read file and reverse read file. Because the reads are paired, you'll also need to set mean inner distance between pairs; this
+is the average distance in basepairs between reads. Use a mean inner distance of 150 for our data as this was the fragment length from the experimental library preparation
+step. 
+
+```{r}
+expression <- read.table("expression.txt")
+table(expression$geno)
+```
+
+
+```{r}
+inds.aa <- expression$geno == "A/A"
+summary(expression$exp[inds.aa])
+```
+
+```{r}
+inds.ag <- expression$geno == "A/G"
+summary(expression$exp[inds.ag])
+```
+
+```{r}
+inds.gg <- expression$geno == "G/G"
+summary(expression$exp[inds.gg]) 
+```
+
+```{r}
+#boxplot(count ~ spray, data = InsectSprays, col = "lightgray")
+boxplot(exp ~ geno, data = expression)
+```
+
+
+steps
+1. fastq (input)
+2. quality control with fastqc (galaxy)
+3. mapping (alignment) with tophat (galaxy)
+4. cufflink (counting) (galaxy)
+5. htseq count to get table of geno expression
+
+
