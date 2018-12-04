@@ -77,3 +77,21 @@ ori <- read.pdb("ligand.pdbqt")
 rmsd(ori, res)
 ```
 
+
+## Section 3: Exploring the conformational dynamics of proteins
+
+## 3.1 Normal Mode Analysis (NMA)
+
+```{r}
+pdb <- read.pdb("1HEL")
+modes <- nma(pdb)
+plot(modes)
+```
+
+```{r, include = FALSE}
+mktrj(modes, mode=7, file = "nma_7.pdb")
+#We can load this into VMD and see the movement of the protein
+#code to insert image ![](file.gif)
+
+```
+
