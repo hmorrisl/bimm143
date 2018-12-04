@@ -1,0 +1,307 @@
+---
+title: "Class 15"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## RNA-Seq analysis
+
+First step is to read our countData and colData (metadata) files that we will use with DESeq
+
+```{r}
+counts <- read.csv("data/airway_scaledcounts.csv", stringsAsFactors = FALSE)
+metadata <- read.csv("data/airway_metadata.csv", stringsAsFactors = FALSE)
+```
+
+stringsAsFactors: Should character vectors be converted to vectors?
+
+```{r}
+head(counts)
+```
+
+```{r}
+head(metadata)
+```
+
+Looking at the counts data, there is quite a bit of variability between different gene expression.
+
+Is there a significant change between the average control gene values and the average treatment gene values?
+
+We are going to compare averages for each gene.
+
+1. Need to determine which counts are controls and which are treated. We need to use the metadata file to tdo this. 
+
+Lets examine the meadata file to find **control** and **treated** columns (cell-lines).
+
+```{r}
+metadata$dex
+metadata$dex == "control"
+control.inds <- metadata$dex == "control"
+control <- metadata[control.inds,]
+```
+
+
+```{r}
+#control.mean <- rowSums( counts[ ,control$id])/4
+# Having this hard coded "4" is not ideal coding. Instead you should use nrow.
+control.mean <- rowSums( counts[ ,control$id])/nrow(control)
+names(control.mean) <- counts$ensgene
+head(control.mean)
+```
+
+Now do the same for the treated data. 
+
+```{r}
+treated.inds <- metadata$dex == "treated"
+treated <- metadata[treated.inds, ]
+```
+
+
+```{r}
+treated.mean <- rowSums( counts[ , treated$id])/nrow(treated)
+names(treated.mean) <- counts$ensgene
+head(treated.mean)
+```
+
+We now have vectors for the mean value of control and treated samples. We now need to combine our meancount data for bookkeeping purposes
+
+```{r}
+meancounts <- data.frame(control.mean, treated.mean)
+colSums(meancounts)
+```
+
+```{r}
+plot(meancounts, xlab = "log Control", ylab = "log Treated", log = "xy")
+# Plotting on a log scale allows us to see the low count data that is all clustered on top of eachother. 
+```
+
+We can find candidate differentially expressed genes by looking for genes with a large change between control and dex-treated samples. We usually look at the log2 of the fold change, because this has better mathematical properties.
+
+Here we calculate the log2foldchange, add it to our meancounts data.dframe and inspect the results with the **head()** function
+
+```{r}
+meancounts$log2fc <- log2(meancounts[, "treated.mean"]/meancounts[ , "control.mean"])
+head(meancounts)
+```
+
+### Filter genes with zero expression
+
+The NaN is returned when you divide by zero and try to take the log. The -Inf is returned when you try to take the log of zero. It turns out that there are a lot of genes with zero expression. Let’s filter our data to remove these genes.
+
+```{r, include=FALSE}
+x <- meancounts[,1:2]==0
+head(x)
+# This will create a logical data.frame telling me which values are zero. What I really want to know are what genes are 0. I want to filter out the genes (rows) that have 0 expression
+head(which(x, arr.ind = TRUE))
+# This is telling me which rows have and which columns have 0 expression
+```
+
+```{r}
+zero.vals <- which(meancounts[,1:2] == 0, arr.ind = TRUE)
+to.rm <- unique(zero.vals[,1])
+# Define the rows we want to remove
+mycounts <- meancounts[-to.rm,]
+# Remove the rows with 0 expression from mycounts data.frame
+head(mycounts)
+```
+
+A common threshold used for calling something differentially expressed is a log2(FoldChange) of greater than 2 or less than -2. Let’s filter the dataset both ways to see how many genes are up or down-regulated
+
+```{r}
+up.ind <- mycounts$log2fc > 2
+down.ind <- mycounts$log2fc < (-2)
+```
+
+Number of genes 'up' and 'down'
+Logical vectors are treated as 0 and 1. So summing the vector should give you the number of upregulate or downregulated
+
+```{r}
+tot.up <- sum(up.ind)
+tot.down <- sum(down.ind)
+```
+
+There are `tot.up` genes upregulated and `tot.down` genes downregulated. In total there are `tot.up + tot.down` genes differentially expressed in either direction 
+
+## Adding annotation data
+
+Our mycounts result table so far only contains the Ensembl gene IDs. However, alternative gene names and extra annotation are usually required for informative for interpretation.
+
+We can add annotation from a supplied CSV file, such as those available from ENSEMBLE or UCSC
+
+```{r}
+anno <- read.csv("data/annotables_grch38.csv")
+head(anno)
+```
+
+Ideally we want this annotation data mapped (or merged) with our mycounts data. In a previous class on writing R functions we introduced the merge() function, which is one common way to do this.
+
+```{r}
+mycounts.anno <- merge(mycounts, anno, by.x = 0, by.y = "ensgene")
+# We can use 0 or row.names to specify the rownmanes of meancounts to merge with "ensgene" column of anno
+```
+
+Another approach is to annotate with bioconductor annotation packages. 
+
+```{r, include = FALSE}
+library(BiocInstaller)
+library("AnnotationDbi")
+library("org.Hs.eg.db")
+```
+
+```{r}
+columns(org.Hs.eg.db)
+```
+
+```{r}
+mycounts$symbol <- mapIds(org.Hs.eg.db,
+                     keys=row.names(mycounts),
+                     column="SYMBOL",
+                     keytype="ENSEMBL",
+                     multiVals="first")
+```
+
+```{r}
+mycounts$entrezid <- mapIds(org.Hs.eg.db,
+                     keys=row.names(mycounts),
+                     column="ENTREZID",
+                     keytype="ENSEMBL",
+                     multiVals="first")
+```
+
+```{r}
+mycounts$uniprot <- mapIds(org.Hs.eg.db,
+                     keys=row.names(mycounts),
+                     column="UNIPROT",
+                     keytype="ENSEMBL",
+                     multiVals="first")
+```
+
+```{r}
+head(mycounts)
+```
+
+Analyze the up and downregulated genes and annotations
+
+```{r}
+head(mycounts[up.ind,])
+```
+
+```{r}
+head(mycounts[down.ind,])
+```
+
+## DESeq2 analysis
+
+```{r}
+library(DESeq2)
+citation("DESeq2")
+```
+
+```{r}
+dds <- DESeqDataSetFromMatrix(countData=counts, 
+                              colData=metadata, 
+                              design=~dex, 
+                              tidy=TRUE)
+dds
+```
+
+```{r}
+dds <- DESeq(dds)
+res <-results(dds)
+res
+```
+
+```{r}
+summary(res)
+```
+
+Use a p-value of 0.05 rather than the default of 0.1
+
+```{r}
+res05 <- results(dds, alpha = 0.05)
+summary(res05)
+```
+
+```{r}
+res01 <- results(dds, alpha=0.01)
+summary(res01)
+```
+
+Add annotation to our results object `res01`
+
+```{r}
+head(res01)
+```
+
+```{r}
+res01$symbol <- mapIds(org.Hs.eg.db,
+                     keys=row.names(res01),
+                     column="SYMBOL",
+                     keytype="ENSEMBL",
+                     multiVals="first")
+```
+
+```{r}
+head(res01)
+```
+
+Save results to a CSv file
+
+```{r}
+write.csv(res01, "signif01_results.csv")
+```
+
+## Focus in on the gene CRISPLD2
+
+```{r}
+i <- grep("CRISPLD2", res01$symbol)
+res01[i,]
+```
+
+```{r}
+d <- plotCounts(dds, gene="ENSG00000103196", intgroup="dex")
+```
+
+
+```{r}
+d <- plotCounts(dds, gene="ENSG00000103196", intgroup="dex", returnData = TRUE)
+d
+```
+
+```{r}
+boxplot(count ~ dex , data=d)
+```
+
+```{r}
+library(ggplot2)
+```
+```{r}
+ggplot(d, aes(dex, count)) + geom_boxplot(aes(fill=dex)) + scale_y_log10() + ggtitle("CRISPLD2")
+```
+
+
+## Volcano Plots
+
+```{r}
+plot( res01$log2FoldChange, -log(res01$padj))
+```
+
+Make a colored version of this plot highlighting genes with high fold change and small p-values
+
+```{r}
+mycols <- rep("black", nrow(res01))
+mycols[abs(res01$log2FoldChange) > 2] <- "red"
+
+inds <- (res01$padj < 0.01) & (abs(res01$log2FoldChange) > 2) 
+
+mycols[inds] <- "blue"
+
+
+plot( res01$log2FoldChange, -log(res01$padj), col = mycols)
+
+# Red has large fold change but no significance. Blue has large fold change and significance 
+```
+
